@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+
+import sys,subprocess,re
+import numpy as np
+import argparse
+
+
+
+### input to matrix:x
+
+def floatcheck(self): ###データの判定式
+    try:
+        val = float(self)
+        if np.isnan( val ):
+            pass
+        elif np.isinf( val ):
+            pass
+        else:
+            return val
+    except ValueError:
+        pass
+
+f = sys.stdin.read()
+f = f.split()
+f = list(map(floatcheck,f))
+f = list(filter(lambda s:s != None, f))
+x = np.array(f)
+
+#print("{0}".format(x))
+
+
+
+### input min,max,bins,bar,width
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--min", help="set a minimum value (default: calculate using input data)", default=np.amin(x),type=float)
+parser.add_argument("--max", help="set a maximum value (default: calculate using input data)", default=np.amax(x),type=float)
+parser.add_argument("--bins", help="set the number of bins (default: 25)", default=25,type=int)
+parser.add_argument("--scale", help="set the number of bar per 1 percent (default: caluculate using window width)",type=float)
+parser.add_argument("--bar", help="set the type of bar (default: [-])", default="-")
+
+arg = parser.parse_args()
+#print(width)
+#print("### min={0} max={1} bins={2} scale={3}".format(arg.min, arg.max, arg.bins, arg.scale))
+
+
+
+### calculation
+#print("{0}".format(x))
+f = list(filter(lambda s:s <= arg.max, f))
+f = list(filter(lambda s:s >= arg.min, f))
+x2 = np.array(f)
+div = float((arg.max - arg.min) / arg.bins)
+c = (x2 - arg.min) / div
+#print(c,np.amax(c))
+c = np.trunc(c)
+#print(c,np.amax(c))
+#print("{0} {1} {2}".format(x,np.amin(x),np.amax(x)))
+c = np.where(c == arg.bins, c-1 , c)
+c = np.hstack( (c,arg.bins-1) ) #末尾に最大binを１つ追加、これがないとbincountが途中で止まる可能性がある
+#print(c,np.amax(c))
+n = np.bincount(c.astype(np.int64))
+n[arg.bins-1] = n[arg.bins-1] - 1 #追加した最大binを１つ削除
+#print(n,np.amax(n))
+sum = float(np.sum(n))
+p = n.astype(np.float64) / sum * 100
+s1 = np.arange(arg.bins)
+s1 = s1 * div + arg.min
+s2 = np.arange(1,arg.bins + 1)
+s2 = s2 * div + arg.min
+data = np.vstack((s1,s2,n,p))
+#print("{0} {1} {2} {3}".format(data,arg.max,div,arg.min))
+#print(data[2,0])
+# s1は閾値下限、s2は上限、nはカウント数、pは割合
+
+
+### scaleの取得
+# カウントnのlength取得
+nl = len(str(np.amax(n)))
+s1l = len(str(round(float(np.amax(s2))))) + 3
+s2l = len(str(round(float(np.amax(s2))))) + 3
+#print(nl,s1l,s2l)
+if arg.scale == None:
+    width = int(subprocess.check_output(["tput","cols"])) - nl - s1l - s2l - 11
+    #print (width)
+    if width <= 40:
+        width = 40
+    scale = round( 0.8 * width / np.amax(p) , 3)
+else:
+    scale = arg.scale
+
+print("### min={0} max={1} bins={2} scale={3} num={4}/{5}".format(arg.min, arg.max, arg.bins, round(scale,2), np.sum(n), x.size))
+
+
+
+### make .dat file
+
+
+
+### write histgram
+for i in range(arg.bins):
+    out1 = str("%.2f" % (round(data[0,i],2))).rjust(s1l,' ')
+    out2 = str("%.2f" % (round(data[1,i],2))).rjust(s2l,' ')
+    out3 = str("(" + str(int(data[2,i])) + ")").ljust(nl + 2,' ')
+    out4 = str( "%.2f" % (round(data[3,i],2)) + "%").rjust(7,' ')
+    len = round(float(scale * data[3,i]))
+    out5 = str().ljust(len,arg.bar)
+    print ("{0}<{1}|{3}{2}|{4}".format(out1,out2,out3,out4,out5))
